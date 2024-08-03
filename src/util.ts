@@ -39,31 +39,34 @@ export function getChildOfType<T extends ts.Node>(
 	node: ts.Node,
 	check: (node: ts.Node) => node is T,
 ): T | undefined {
-	for (const child of node.getChildren()) {
-		if (check(child)) {
-			return child;
-		}
-
-		const result = getChildOfType(child, check);
-		if (result) return result;
-	}
-	return undefined;
+	let foundChild: T | undefined = undefined;
+	node.forEachChild((child) => {
+		if (foundChild) return;
+		foundChild = check(child) !== false ? child as T : getChildOfType(child, check);
+	});
+	return foundChild;
 }
 
 export function isChildOfNode(parent: ts.Node, node: ts.Node) {
-	for (const child of parent.getChildren()) {
-		if (child === node) return true;
-		if (isChildOfNode(child, node)) return true;
-	}
-	return false;
+	let result = false;
+
+	parent.forEachChild((child) => {
+		if (result) return;
+		result = child === node || isChildOfNode(child, node);
+	});
+	return result;
 }
 
-export function getGetterSetterDeclarations(symbol: ts.Symbol) {
+export function getGetterSetterDeclarations(program: ts.Program, node: ts.PropertyAccessExpression) {
+	const typeChecker = program.getTypeChecker();
+	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
+	if (!nodeSymbol) return [undefined, undefined];
+
 	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
 	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
-	if (!symbol.declarations) return [undefined, undefined];
+	if (!nodeSymbol.declarations) return [undefined, undefined];
 
-	for (const declaration of symbol.declarations) {
+	for (const declaration of nodeSymbol.declarations) {
 		if (ts.isGetAccessorDeclaration(declaration)) {
 			getterDeclaration = declaration;
 		}

@@ -39,13 +39,8 @@ function visitPropertyAccessExpression(
 	node: ts.PropertyAccessExpression,
 ) {
 	const { factory, program, config } = context;
-	const typeChecker = program.getTypeChecker();
-
-	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
-	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
-
 	const [getterDeclaration, setterDeclaration] =
-		getGetterSetterDeclarations(nodeSymbol);
+		getGetterSetterDeclarations(program, node);
 	const isGetterOrSetter =
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
@@ -57,6 +52,7 @@ function visitPropertyAccessExpression(
 	const isSetter =
 		setterDeclaration !== undefined &&
 		assignmentExpression !== undefined &&
+		assignmentExpression.right !== undefined &&
 		(node === assignmentExpression.left ||
 			isChildOfNode(assignmentExpression.left, node));
 
@@ -84,12 +80,38 @@ function visitPropertyAccessExpression(
 	);
 }
 
-function visitAssignmentExpression(
+const assignmentTokenLookup: Record<
+	ts.CompoundAssignmentOperator,
+	ts.BinaryOperator
+> = {
+	[ts.SyntaxKind.PlusEqualsToken]: ts.SyntaxKind.PlusToken,
+	[ts.SyntaxKind.MinusEqualsToken]: ts.SyntaxKind.MinusToken,
+	[ts.SyntaxKind.AsteriskEqualsToken]: ts.SyntaxKind.AsteriskToken,
+	[ts.SyntaxKind.AsteriskAsteriskEqualsToken]:
+		ts.SyntaxKind.AsteriskAsteriskToken,
+	[ts.SyntaxKind.SlashEqualsToken]: ts.SyntaxKind.SlashToken,
+	[ts.SyntaxKind.PercentEqualsToken]: ts.SyntaxKind.PercentToken,
+	[ts.SyntaxKind.LessThanLessThanEqualsToken]:
+		ts.SyntaxKind.LessThanLessThanToken,
+	[ts.SyntaxKind.GreaterThanGreaterThanEqualsToken]:
+		ts.SyntaxKind.GreaterThanGreaterThanToken,
+	[ts.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken]:
+		ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
+	[ts.SyntaxKind.AmpersandEqualsToken]: ts.SyntaxKind.AmpersandToken,
+	[ts.SyntaxKind.BarEqualsToken]: ts.SyntaxKind.BarToken,
+	[ts.SyntaxKind.BarBarEqualsToken]: ts.SyntaxKind.BarBarToken,
+	[ts.SyntaxKind.AmpersandAmpersandEqualsToken]:
+		ts.SyntaxKind.AmpersandAmpersandToken,
+	[ts.SyntaxKind.QuestionQuestionEqualsToken]:
+		ts.SyntaxKind.QuestionQuestionToken,
+	[ts.SyntaxKind.CaretEqualsToken]: ts.SyntaxKind.CaretToken,
+};
+
+function visitBinaryExpression(
 	context: TransformContext,
 	node: ts.BinaryExpression,
 ) {
-	const { factory, program } = context;
-	const typeChecker = program.getTypeChecker();
+	const { factory, program, config } = context;
 
 	const propertyAccessExpression = getChildOfType(
 		node,
@@ -97,16 +119,117 @@ function visitAssignmentExpression(
 	);
 	if (!propertyAccessExpression) return context.transform(node);
 
-	const nodeSymbol = typeChecker.getSymbolAtLocation(propertyAccessExpression);
-	if (!nodeSymbol) return context.transform(node);
-
-	const [_, setterDeclaration] = getGetterSetterDeclarations(nodeSymbol);
+	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(
+		program,
+		propertyAccessExpression,
+	);
 
 	const isSetter = setterDeclaration !== undefined;
 	if (!isSetter) return context.transform(node);
 
-	return context.transform(
-		factory.createCallExpression(node.left, undefined, [node.right]),
+	const original = propertyAccessExpression;
+	if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+		return factory.createCallExpression(
+			factory.createPropertyAccessExpression(
+				original.expression,
+				factory.createIdentifier(
+					`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
+				),
+			),
+			undefined,
+			[node.right],
+		);
+	}
+
+	if (
+		ts.isAssignmentExpression(node, false) &&
+		ts.isCompoundAssignment(node.operatorToken.kind)
+	) {
+		console.assert(
+			getterDeclaration !== undefined,
+			`Required getter declaration for compound assignment: ${node.getText()}`,
+		);
+
+		return factory.createCallExpression(
+			factory.createPropertyAccessExpression(
+				original.expression,
+				factory.createIdentifier(
+					`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
+				),
+			),
+			undefined,
+			[
+				factory.createBinaryExpression(
+					factory.createCallExpression(
+						factory.createPropertyAccessExpression(
+							original.expression,
+							factory.createIdentifier(
+								`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
+							),
+						),
+						undefined,
+						undefined,
+					),
+					assignmentTokenLookup[node.operatorToken.kind],
+					node.right,
+				),
+			],
+		);
+	}
+
+	return context.transform(node);
+}
+
+const postfixUnaryOperatorLookup: Record<ts.PostfixUnaryOperator, ts.BinaryOperator> = {
+	[ts.SyntaxKind.PlusPlusToken]: ts.SyntaxKind.PlusToken,
+	[ts.SyntaxKind.MinusMinusToken]: ts.SyntaxKind.MinusToken
+}
+
+function visitPostfixUnaryExpression(
+	context: TransformContext,
+	node: ts.PostfixUnaryExpression,
+) {
+	const { factory, program, config } = context;
+	const propertyAccessExpression = getChildOfType(
+		node,
+		ts.isPropertyAccessExpression,
+	);
+	if (!propertyAccessExpression) return context.transform(node);
+
+	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(
+		program,
+		propertyAccessExpression,
+	);
+
+	const isSetter = setterDeclaration !== undefined;
+	if (!isSetter) return context.transform(node);
+
+	const original = propertyAccessExpression;
+
+	return factory.createCallExpression(
+		factory.createPropertyAccessExpression(
+			original.expression,
+			factory.createIdentifier(
+				`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
+			),
+		),
+		undefined,
+		[
+			factory.createBinaryExpression(
+				factory.createCallExpression(
+					factory.createPropertyAccessExpression(
+						original.expression,
+						factory.createIdentifier(
+							`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
+						),
+					),
+					undefined,
+					undefined,
+				),
+				postfixUnaryOperatorLookup[node.operator],
+				factory.createNumericLiteral(1),
+			),
+		],
 	);
 }
 
@@ -118,14 +241,14 @@ function visitSetAccessor(
 	return context.transform(
 		factory.createMethodDeclaration(
 			node.modifiers,
-			undefined,
+			node.asteriskToken,
 			factory.createIdentifier(
 				`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
 			),
-			undefined,
-			undefined,
+			node.questionToken,
+			node.typeParameters,
 			node.parameters,
-			undefined,
+			node.type,
 			node.body,
 		),
 	);
@@ -139,17 +262,33 @@ function visitGetAccessor(
 	return context.transform(
 		factory.createMethodDeclaration(
 			node.modifiers,
-			undefined,
+			node.asteriskToken,
 			factory.createIdentifier(
 				`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
 			),
-			undefined,
-			undefined,
-			[],
-			undefined,
+			node.questionToken,
+			node.typeParameters,
+			node.parameters,
+			node.type,
 			node.body,
 		),
 	);
+}
+
+function visitExpression(context: TransformContext, node: ts.Expression) {
+	if (ts.isPropertyAccessExpression(node)) {
+		return visitPropertyAccessExpression(context, node);
+	}
+
+	if (ts.isBinaryExpression(node)) {
+		return visitBinaryExpression(context, node);
+	}
+
+	if (ts.isPostfixUnaryExpression(node)) {
+		return visitPostfixUnaryExpression(context, node);
+	}
+
+	return context.transform(node);
 }
 
 function visitNode(
@@ -160,16 +299,12 @@ function visitNode(
 		return visitGetAccessor(context, node);
 	}
 
-	if (ts.isPropertyAccessExpression(node)) {
-		return visitPropertyAccessExpression(context, node);
-	}
-
 	if (ts.isSetAccessor(node)) {
 		return visitSetAccessor(context, node);
 	}
 
-	if (ts.isAssignmentExpression(node)) {
-		return visitAssignmentExpression(context, node);
+	if (ts.isExpression(node)) {
+		return visitExpression(context, node);
 	}
 
 	return context.transform(node);
