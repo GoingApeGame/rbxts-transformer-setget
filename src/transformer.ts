@@ -170,7 +170,7 @@ function visitBinaryExpression(
 						undefined,
 					),
 					assignmentTokenLookup[node.operatorToken.kind],
-					node.right,
+					context.transform(node).right,
 				),
 			],
 		);
