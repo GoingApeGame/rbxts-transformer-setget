@@ -39,8 +39,10 @@ function visitPropertyAccessExpression(
 	node: ts.PropertyAccessExpression,
 ) {
 	const { factory, program, config } = context;
-	const [getterDeclaration, setterDeclaration] =
-		getGetterSetterDeclarations(program, node);
+	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(
+		program,
+		node,
+	);
 	const isGetterOrSetter =
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
@@ -127,13 +129,18 @@ function visitBinaryExpression(
 	if (!isSetter) return context.transform(node);
 
 	const original = propertyAccessExpression;
+	const SETTER_IDENTIFIER = factory.createIdentifier(
+		`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
+	);
+	const GETTER_IDENTIFIER = factory.createIdentifier(
+		`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
+	);
+
 	if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
 				original.expression,
-				factory.createIdentifier(
-					`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
-				),
+				SETTER_IDENTIFIER,
 			),
 			undefined,
 			[context.transform(node).right],
@@ -152,9 +159,7 @@ function visitBinaryExpression(
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
 				original.expression,
-				factory.createIdentifier(
-					`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
-				),
+				SETTER_IDENTIFIER,
 			),
 			undefined,
 			[
@@ -162,9 +167,7 @@ function visitBinaryExpression(
 					factory.createCallExpression(
 						factory.createPropertyAccessExpression(
 							original.expression,
-							factory.createIdentifier(
-								`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
-							),
+							GETTER_IDENTIFIER,
 						),
 						undefined,
 						undefined,
@@ -179,10 +182,13 @@ function visitBinaryExpression(
 	return context.transform(node);
 }
 
-const postfixUnaryOperatorLookup: Record<ts.PostfixUnaryOperator, ts.BinaryOperator> = {
+const postfixUnaryOperatorLookup: Record<
+	ts.PostfixUnaryOperator,
+	ts.BinaryOperator
+> = {
 	[ts.SyntaxKind.PlusPlusToken]: ts.SyntaxKind.PlusToken,
-	[ts.SyntaxKind.MinusMinusToken]: ts.SyntaxKind.MinusToken
-}
+	[ts.SyntaxKind.MinusMinusToken]: ts.SyntaxKind.MinusToken,
+};
 
 function visitPostfixUnaryExpression(
 	context: TransformContext,
@@ -204,13 +210,17 @@ function visitPostfixUnaryExpression(
 	if (!isSetter) return context.transform(node);
 
 	const original = propertyAccessExpression;
+	const SETTER_IDENTIFIER = factory.createIdentifier(
+		`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
+	);
+	const GETTER_IDENTIFIER = factory.createIdentifier(
+		`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
+	);
 
 	return factory.createCallExpression(
 		factory.createPropertyAccessExpression(
 			original.expression,
-			factory.createIdentifier(
-				`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
-			),
+			SETTER_IDENTIFIER,
 		),
 		undefined,
 		[
@@ -218,9 +228,7 @@ function visitPostfixUnaryExpression(
 				factory.createCallExpression(
 					factory.createPropertyAccessExpression(
 						original.expression,
-						factory.createIdentifier(
-							`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
-						),
+						GETTER_IDENTIFIER,
 					),
 					undefined,
 					undefined,
