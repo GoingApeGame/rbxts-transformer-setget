@@ -1,22 +1,14 @@
 import ts from "typescript";
-import { getNearestBinaryExpression } from "./util";
+import { getAncestorOfType, getChildOfType, isChildOfNode } from "./util";
 
-/**
- * This is the transformer's configuration, the values are passed from the tsconfig.
- */
 export type TransformerConfig = {
 	internalPrefix?: string;
 };
 
 const DEFAULT_PREFIX = "__";
-const SETTER_POSTFIX = "_set";
-const GETTER_POSTFIX = "_get";
+const SETTER_PREFIX = "set";
+const GETTER_PREFIX = "get";
 
-/**
- * This is a utility object to pass around your dependencies.
- *
- * You can also use this object to store state, e.g prereqs.
- */
 export class TransformContext {
 	public factory: ts.NodeFactory;
 
@@ -28,9 +20,6 @@ export class TransformContext {
 		this.factory = context.factory;
 	}
 
-	/**
-	 * Transforms the children of the specified node.
-	 */
 	transform<T extends ts.Node>(node: T): T {
 		return ts.visitEachChild(
 			node,
@@ -69,11 +58,13 @@ function visitPropertyAccessExpression(
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
 
-	const binaryExpression = getNearestBinaryExpression(node);
+	const binaryExpression = getAncestorOfType(node, ts.isBinaryExpression);
 	const isSetter =
 		setterDeclaration !== undefined &&
 		binaryExpression !== undefined &&
-		binaryExpression.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+		binaryExpression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+		(node === binaryExpression.left ||
+			isChildOfNode(binaryExpression.left, node));
 
 	if (!isSetter) {
 		return factory.createCallChain(
@@ -81,7 +72,7 @@ function visitPropertyAccessExpression(
 				node,
 				context.transform(node.expression),
 				factory.createIdentifier(
-					`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_POSTFIX}${node.name.getText()}`,
+					`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
 				),
 			),
 			node.questionDotToken,
@@ -94,7 +85,7 @@ function visitPropertyAccessExpression(
 		node,
 		context.transform(node.expression),
 		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_POSTFIX}${node.name.getText()}`,
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
 		),
 	);
 }
@@ -106,7 +97,13 @@ function visitBinaryExpression(
 	const { factory, program } = context;
 	const typeChecker = program.getTypeChecker();
 
-	const nodeSymbol = typeChecker.getSymbolAtLocation(node.left);
+	const propertyAccessExpression = getChildOfType(
+		node,
+		ts.isPropertyAccessExpression,
+	);
+	if (!propertyAccessExpression) return context.transform(node);
+
+	const nodeSymbol = typeChecker.getSymbolAtLocation(propertyAccessExpression);
 	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
 
 	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
@@ -148,7 +145,7 @@ function visitSetAccessor(
 		node.modifiers,
 		undefined,
 		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_POSTFIX}${node.name.getText()}`,
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
 		),
 		undefined,
 		undefined,
@@ -167,7 +164,7 @@ function visitGetAccessor(
 		node.modifiers,
 		undefined,
 		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_POSTFIX}${node.name.getText()}`,
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
 		),
 		undefined,
 		undefined,
