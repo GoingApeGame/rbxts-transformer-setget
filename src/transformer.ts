@@ -52,7 +52,6 @@ function visitPropertyAccessExpression(
 	const isSetter =
 		setterDeclaration !== undefined &&
 		assignmentExpression !== undefined &&
-		assignmentExpression.right !== undefined &&
 		(node === assignmentExpression.left ||
 			isChildOfNode(assignmentExpression.left, node));
 
@@ -137,7 +136,7 @@ function visitBinaryExpression(
 				),
 			),
 			undefined,
-			[node.right],
+			[context.transform(node).right],
 		);
 	}
 
