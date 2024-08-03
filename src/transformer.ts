@@ -50,13 +50,15 @@ function visitPropertyAccessExpression(
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
 
-	const binaryExpression = getAncestorOfType(node, ts.isBinaryExpression);
+	const assignmentExpression = getAncestorOfType(
+		node,
+		ts.isAssignmentExpression,
+	);
 	const isSetter =
 		setterDeclaration !== undefined &&
-		binaryExpression !== undefined &&
-		binaryExpression.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-		(node === binaryExpression.left ||
-			isChildOfNode(binaryExpression.left, node));
+		assignmentExpression !== undefined &&
+		(node === assignmentExpression.left ||
+			isChildOfNode(assignmentExpression.left, node));
 
 	if (!isSetter) {
 		return factory.createCallChain(
@@ -82,7 +84,7 @@ function visitPropertyAccessExpression(
 	);
 }
 
-function visitBinaryExpression(
+function visitAssignmentExpression(
 	context: TransformContext,
 	node: ts.BinaryExpression,
 ) {
@@ -98,16 +100,9 @@ function visitBinaryExpression(
 	const nodeSymbol = typeChecker.getSymbolAtLocation(propertyAccessExpression);
 	if (!nodeSymbol) return context.transform(node);
 
-	const [getterDeclaration, setterDeclaration] =
-		getGetterSetterDeclarations(nodeSymbol);
-	const isGetterOrSetter =
-		(getterDeclaration || setterDeclaration) !== undefined;
-	if (!isGetterOrSetter) return context.transform(node);
+	const [_, setterDeclaration] = getGetterSetterDeclarations(nodeSymbol);
 
-	const isSetter =
-		setterDeclaration !== undefined &&
-		node &&
-		node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+	const isSetter = setterDeclaration !== undefined;
 	if (!isSetter) return context.transform(node);
 
 	return context.transform(
@@ -173,8 +168,8 @@ function visitNode(
 		return visitSetAccessor(context, node);
 	}
 
-	if (ts.isBinaryExpression(node)) {
-		return visitBinaryExpression(context, node);
+	if (ts.isAssignmentExpression(node)) {
+		return visitAssignmentExpression(context, node);
 	}
 
 	return context.transform(node);
