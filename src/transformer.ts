@@ -1,11 +1,16 @@
 import ts from "typescript";
+import { getNearestBinaryExpression } from "./util";
 
 /**
  * This is the transformer's configuration, the values are passed from the tsconfig.
  */
-export interface TransformerConfig {
-	_: void;
-}
+export type TransformerConfig = {
+	internalPrefix?: string;
+};
+
+const DEFAULT_PREFIX = "__";
+const SETTER_POSTFIX = "_set";
+const GETTER_POSTFIX = "_get";
 
 /**
  * This is a utility object to pass around your dependencies.
@@ -27,91 +32,170 @@ export class TransformContext {
 	 * Transforms the children of the specified node.
 	 */
 	transform<T extends ts.Node>(node: T): T {
-		return ts.visitEachChild(node, (node) => visitNode(this, node), this.context);
-	}
-}
-
-function visitImportDeclaration(context: TransformContext, node: ts.ImportDeclaration) {
-	const { factory } = context;
-
-	const path = node.moduleSpecifier;
-	const clause = node.importClause;
-	if (!clause) return node;
-	if (!ts.isStringLiteral(path)) return node;
-	if (path.text !== "@rbxts/services") return node;
-
-	const namedBindings = clause.namedBindings;
-	if (!namedBindings) return node;
-	if (!ts.isNamedImports(namedBindings)) return node;
-
-	return [
-		// We replace the import declaration instead of stripping it to prevent
-		// issues with isolated modules.
-		factory.updateImportDeclaration(
+		return ts.visitEachChild(
 			node,
-			undefined,
-			factory.createImportClause(false, undefined, factory.createNamedImports([])),
-			node.moduleSpecifier,
-			undefined,
-		),
+			(node) => visitNode(this, node),
+			this.context,
+		);
+	}
+}
 
-		// Creates a multi-variable statement as shown below.
-		//
-		// const Players = game.GetService("Players"),
-		//		Workspace = game.GetService("Workspace");
-		factory.createVariableStatement(
-			undefined,
-			factory.createVariableDeclarationList(
-				namedBindings.elements.map((specifier) => {
-					const serviceName = specifier.propertyName ? specifier.propertyName.text : specifier.name.text;
-					const variableName = specifier.name;
+function visitPropertyAccessExpression(
+	context: TransformContext,
+	node: ts.PropertyAccessExpression,
+) {
+	const { factory, program, config } = context;
+	const typeChecker = program.getTypeChecker();
 
-					return factory.createVariableDeclaration(
-						variableName,
-						undefined,
-						undefined,
-						factory.createCallExpression(
-							factory.createPropertyAccessExpression(factory.createIdentifier("game"), "GetService"),
-							undefined,
-							[factory.createStringLiteral(serviceName)],
-						),
-					);
-				}),
-				ts.NodeFlags.Const,
+	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
+	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
+
+	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
+	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
+
+	for (const declaration of nodeSymbol.declarations) {
+		if (ts.isGetAccessorDeclaration(declaration)) {
+			getterDeclaration = declaration;
+		}
+
+		if (ts.isSetAccessorDeclaration(declaration)) {
+			setterDeclaration = declaration;
+		}
+
+		if (getterDeclaration && setterDeclaration) break;
+	}
+
+	const isGetterOrSetter =
+		(getterDeclaration || setterDeclaration) !== undefined;
+	if (!isGetterOrSetter) return context.transform(node);
+
+	const binaryExpression = getNearestBinaryExpression(node);
+	const isSetter =
+		setterDeclaration !== undefined &&
+		binaryExpression !== undefined &&
+		binaryExpression.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+
+	if (!isSetter) {
+		return factory.createCallChain(
+			factory.updatePropertyAccessExpression(
+				node,
+				context.transform(node.expression),
+				factory.createIdentifier(
+					`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_POSTFIX}${node.name.getText()}`,
+				),
 			),
+			node.questionDotToken,
+			[],
+			[],
+		);
+	}
+
+	return factory.updatePropertyAccessExpression(
+		node,
+		context.transform(node.expression),
+		factory.createIdentifier(
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_POSTFIX}${node.name.getText()}`,
 		),
-	];
+	);
 }
 
-function visitStatement(context: TransformContext, node: ts.Statement): ts.Statement | ts.Statement[] {
-	// This is used to transform statements.
-	// TypeScript allows you to return multiple statements here.
+function visitBinaryExpression(
+	context: TransformContext,
+	node: ts.BinaryExpression,
+) {
+	const { factory, program } = context;
+	const typeChecker = program.getTypeChecker();
 
-	if (ts.isImportDeclaration(node)) {
-		// We have encountered an import declaration,
-		// so we should transform it using a separate function.
+	const nodeSymbol = typeChecker.getSymbolAtLocation(node.left);
+	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
 
-		return visitImportDeclaration(context, node);
+	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
+	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
+
+	for (const declaration of nodeSymbol.declarations) {
+		if (ts.isGetAccessorDeclaration(declaration)) {
+			getterDeclaration = declaration;
+		}
+
+		if (ts.isSetAccessorDeclaration(declaration)) {
+			setterDeclaration = declaration;
+		}
+
+		if (getterDeclaration && setterDeclaration) break;
 	}
 
-	return context.transform(node);
+	const isGetterOrSetter =
+		(getterDeclaration || setterDeclaration) !== undefined;
+	if (!isGetterOrSetter) return context.transform(node);
+
+	const isSetter =
+		setterDeclaration !== undefined &&
+		node &&
+		node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+	if (!isSetter) return context.transform(node);
+
+	return context.transform(
+		factory.createCallExpression(node.left, undefined, [node.right]),
+	);
 }
 
-function visitExpression(context: TransformContext, node: ts.Expression): ts.Expression {
-	// This can be used to transform expressions
-	// For example, a call expression for macros.
-
-	return context.transform(node);
+function visitSetAccessor(
+	context: TransformContext,
+	node: ts.SetAccessorDeclaration,
+) {
+	const { factory, config } = context;
+	return factory.createMethodDeclaration(
+		node.modifiers,
+		undefined,
+		factory.createIdentifier(
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_POSTFIX}${node.name.getText()}`,
+		),
+		undefined,
+		undefined,
+		node.parameters,
+		undefined,
+		node.body,
+	);
 }
 
-function visitNode(context: TransformContext, node: ts.Node): ts.Node | ts.Node[] {
-	if (ts.isStatement(node)) {
-		return visitStatement(context, node);
-	} else if (ts.isExpression(node)) {
-		return visitExpression(context, node);
+function visitGetAccessor(
+	context: TransformContext,
+	node: ts.GetAccessorDeclaration,
+) {
+	const { factory, config } = context;
+	return factory.createMethodDeclaration(
+		node.modifiers,
+		undefined,
+		factory.createIdentifier(
+			`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_POSTFIX}${node.name.getText()}`,
+		),
+		undefined,
+		undefined,
+		[],
+		undefined,
+		node.body,
+	);
+}
+
+function visitNode(
+	context: TransformContext,
+	node: ts.Node,
+): ts.Node | ts.Node[] {
+	if (ts.isGetAccessor(node)) {
+		return visitGetAccessor(context, node);
 	}
 
-	// We encountered a node that we don't handle above,
-	// but we should keep iterating the AST in case we find something we want to transform.
+	if (ts.isPropertyAccessExpression(node)) {
+		return visitPropertyAccessExpression(context, node);
+	}
+
+	if (ts.isSetAccessor(node)) {
+		return visitSetAccessor(context, node);
+	}
+
+	if (ts.isBinaryExpression(node)) {
+		return visitBinaryExpression(context, node);
+	}
+
 	return context.transform(node);
 }
