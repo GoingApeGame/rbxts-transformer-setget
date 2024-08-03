@@ -15,7 +15,7 @@ export function isTuple<T extends ts.Node[] | []>(
 
 export function getAncestorOfType<T extends ts.Node>(
 	node: ts.Node,
-    check: (node: ts.Node) => node is T,
+	check: (node: ts.Node) => node is T,
 ): T | undefined {
 	let currentNode: ts.Node = node;
 	while (currentNode.parent) {
@@ -37,7 +37,7 @@ export function getAncestorOfType<T extends ts.Node>(
 
 export function getChildOfType<T extends ts.Node>(
 	node: ts.Node,
-    check: (node: ts.Node) => node is T,
+	check: (node: ts.Node) => node is T,
 ): T | undefined {
 	for (const child of node.getChildren()) {
 		if (check(child)) {
@@ -56,4 +56,24 @@ export function isChildOfNode(parent: ts.Node, node: ts.Node) {
 		if (isChildOfNode(child, node)) return true;
 	}
 	return false;
+}
+
+export function getGetterSetterDeclarations(symbol: ts.Symbol) {
+	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
+	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
+	if (!symbol.declarations) return [undefined, undefined];
+
+	for (const declaration of symbol.declarations) {
+		if (ts.isGetAccessorDeclaration(declaration)) {
+			getterDeclaration = declaration;
+		}
+
+		if (ts.isSetAccessorDeclaration(declaration)) {
+			setterDeclaration = declaration;
+		}
+
+		if (getterDeclaration && setterDeclaration) break;
+	}
+
+	return [getterDeclaration, setterDeclaration];
 }

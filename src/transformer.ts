@@ -1,8 +1,13 @@
 import ts from "typescript";
-import { getAncestorOfType, getChildOfType, isChildOfNode } from "./util";
+import {
+	getAncestorOfType,
+	getChildOfType,
+	getGetterSetterDeclarations,
+	isChildOfNode,
+} from "./util";
 
 export type TransformerConfig = {
-	internalPrefix?: string;
+	customPrefix?: string;
 };
 
 const DEFAULT_PREFIX = "__";
@@ -39,21 +44,8 @@ function visitPropertyAccessExpression(
 	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
 	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
 
-	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
-	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
-
-	for (const declaration of nodeSymbol.declarations) {
-		if (ts.isGetAccessorDeclaration(declaration)) {
-			getterDeclaration = declaration;
-		}
-
-		if (ts.isSetAccessorDeclaration(declaration)) {
-			setterDeclaration = declaration;
-		}
-
-		if (getterDeclaration && setterDeclaration) break;
-	}
-
+	const [getterDeclaration, setterDeclaration] =
+		getGetterSetterDeclarations(nodeSymbol);
 	const isGetterOrSetter =
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
@@ -72,7 +64,7 @@ function visitPropertyAccessExpression(
 				node,
 				context.transform(node.expression),
 				factory.createIdentifier(
-					`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
+					`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
 				),
 			),
 			node.questionDotToken,
@@ -85,7 +77,7 @@ function visitPropertyAccessExpression(
 		node,
 		context.transform(node.expression),
 		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
+			`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
 		),
 	);
 }
@@ -104,23 +96,10 @@ function visitBinaryExpression(
 	if (!propertyAccessExpression) return context.transform(node);
 
 	const nodeSymbol = typeChecker.getSymbolAtLocation(propertyAccessExpression);
-	if (!nodeSymbol || !nodeSymbol.declarations) return context.transform(node);
+	if (!nodeSymbol) return context.transform(node);
 
-	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
-	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
-
-	for (const declaration of nodeSymbol.declarations) {
-		if (ts.isGetAccessorDeclaration(declaration)) {
-			getterDeclaration = declaration;
-		}
-
-		if (ts.isSetAccessorDeclaration(declaration)) {
-			setterDeclaration = declaration;
-		}
-
-		if (getterDeclaration && setterDeclaration) break;
-	}
-
+	const [getterDeclaration, setterDeclaration] =
+		getGetterSetterDeclarations(nodeSymbol);
 	const isGetterOrSetter =
 		(getterDeclaration || setterDeclaration) !== undefined;
 	if (!isGetterOrSetter) return context.transform(node);
@@ -141,17 +120,19 @@ function visitSetAccessor(
 	node: ts.SetAccessorDeclaration,
 ) {
 	const { factory, config } = context;
-	return factory.createMethodDeclaration(
-		node.modifiers,
-		undefined,
-		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
+	return context.transform(
+		factory.createMethodDeclaration(
+			node.modifiers,
+			undefined,
+			factory.createIdentifier(
+				`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
+			),
+			undefined,
+			undefined,
+			node.parameters,
+			undefined,
+			node.body,
 		),
-		undefined,
-		undefined,
-		node.parameters,
-		undefined,
-		node.body,
 	);
 }
 
@@ -160,17 +141,19 @@ function visitGetAccessor(
 	node: ts.GetAccessorDeclaration,
 ) {
 	const { factory, config } = context;
-	return factory.createMethodDeclaration(
-		node.modifiers,
-		undefined,
-		factory.createIdentifier(
-			`${config.internalPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
+	return context.transform(
+		factory.createMethodDeclaration(
+			node.modifiers,
+			undefined,
+			factory.createIdentifier(
+				`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
+			),
+			undefined,
+			undefined,
+			[],
+			undefined,
+			node.body,
 		),
-		undefined,
-		undefined,
-		[],
-		undefined,
-		node.body,
 	);
 }
 
