@@ -61,7 +61,7 @@ function visitPropertyAccessExpression(
 		return factory.createCallChain(
 			factory.updatePropertyAccessExpression(
 				node,
-				context.transform(node.expression),
+				context.transform(node).expression,
 				factory.createIdentifier(
 					`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${node.name.getText()}`,
 				),
@@ -74,7 +74,7 @@ function visitPropertyAccessExpression(
 
 	return factory.updatePropertyAccessExpression(
 		node,
-		context.transform(node.expression),
+		context.transform(node).expression,
 		factory.createIdentifier(
 			`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${node.name.getText()}`,
 		),
@@ -139,7 +139,7 @@ function visitBinaryExpression(
 	if (node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
-				original.expression,
+				context.transform(original).expression,
 				SETTER_IDENTIFIER,
 			),
 			undefined,
@@ -158,7 +158,7 @@ function visitBinaryExpression(
 
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
-				original.expression,
+				context.transform(original).expression,
 				SETTER_IDENTIFIER,
 			),
 			undefined,
@@ -166,7 +166,7 @@ function visitBinaryExpression(
 				factory.createBinaryExpression(
 					factory.createCallExpression(
 						factory.createPropertyAccessExpression(
-							original.expression,
+							context.transform(original).expression,
 							GETTER_IDENTIFIER,
 						),
 						undefined,
