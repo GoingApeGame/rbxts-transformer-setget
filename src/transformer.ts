@@ -1,9 +1,12 @@
+import chalk from "chalk";
 import ts from "typescript";
 import {
 	getAncestorOfType,
 	getChildOfType,
+	getDescendantsOfType,
 	getGetterSetterDeclarations,
 	isChildOfNode,
+	writeLine,
 } from "./util";
 
 export type TransformerConfig = {
@@ -151,10 +154,20 @@ function visitBinaryExpression(
 		ts.isAssignmentExpression(node, false) &&
 		ts.isCompoundAssignment(node.operatorToken.kind)
 	) {
-		console.assert(
-			getterDeclaration !== undefined,
-			`Required getter declaration for compound assignment: ${node.getText()}`,
-		);
+		if (!getterDeclaration) {
+			writeLine(
+				`Required getter declaration of "${chalk.yellow(propertyAccessExpression.getText())}" for compound assignment: ${chalk.yellow(node.getText())}`,
+			);
+			process.exit(1);
+		}
+
+		if (getDescendantsOfType(original, ts.isNewExpression).length > 0) {
+			writeLine(
+				`Cannot compile a compound assignment with a new expression inside: ${chalk.yellow(node.getText())}`,
+				`${chalk.yellow("Suggestion:")} extract new expression into a variable.`,
+			);
+			process.exit(1);
+		}
 
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
@@ -216,6 +229,21 @@ function visitPostfixUnaryExpression(
 	const GETTER_IDENTIFIER = factory.createIdentifier(
 		`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
 	);
+
+	if (!getterDeclaration) {
+		writeLine(
+			`Required getter declaration of "${chalk.yellow(propertyAccessExpression.getText())}" for postfix unary expression: ${chalk.yellow(node.getText())}`,
+		);
+		process.exit(1);
+	}
+
+	if (getDescendantsOfType(original, ts.isNewExpression).length > 0) {
+		writeLine(
+			`Cannot compile a postfix unary expression with a new expression inside: ${chalk.yellow(node.getText())}`,
+			`${chalk.yellow("Suggestion:")} extract new expression into a variable.`,
+		);
+		process.exit(1);
+	}
 
 	return factory.createCallExpression(
 		factory.createPropertyAccessExpression(

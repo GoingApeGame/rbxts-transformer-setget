@@ -1,3 +1,4 @@
+import chalk from "chalk";
 import ts from "typescript";
 
 type TupleToUnion<T extends unknown[]> = T[number];
@@ -42,9 +43,38 @@ export function getChildOfType<T extends ts.Node>(
 	let foundChild: T | undefined = undefined;
 	node.forEachChild((child) => {
 		if (foundChild) return;
-		foundChild = check(child) !== false ? child as T : getChildOfType(child, check);
+		foundChild =
+			check(child) !== false ? (child as T) : getChildOfType(child, check);
 	});
 	return foundChild;
+}
+
+export function writeLine(...messages: unknown[]) {
+	for (const message of messages) {
+		const text =
+			typeof message === "string"
+				? `${message}`
+				: `${JSON.stringify(message, undefined, "\t")}`;
+
+		const prefix = `[${chalk.gray("rbxts-transformer-setget")}]: `;
+		process.stdout.write(
+			`${prefix}${text.replace(/\n/g, `\n${prefix}`)}\n`,
+		);
+	}
+}
+
+export function getDescendantsOfType<T extends ts.Node>(
+	node: ts.Node,
+	check: (node: ts.Node) => node is T,
+): T[] {
+	const children: T[] = [];
+
+	node.forEachChild((child) => {
+		if (check(child)) children.push(child);
+		children.push(...getDescendantsOfType(child, check));
+	});
+
+	return children;
 }
 
 export function isChildOfNode(parent: ts.Node, node: ts.Node) {
@@ -57,7 +87,10 @@ export function isChildOfNode(parent: ts.Node, node: ts.Node) {
 	return result;
 }
 
-export function getGetterSetterDeclarations(program: ts.Program, node: ts.PropertyAccessExpression) {
+export function getGetterSetterDeclarations(
+	program: ts.Program,
+	node: ts.PropertyAccessExpression,
+) {
 	const typeChecker = program.getTypeChecker();
 	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
 	if (!nodeSymbol) return [undefined, undefined];
