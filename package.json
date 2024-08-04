@@ -1,10 +1,18 @@
 {
 	"name": "rbxts-transformer-setget",
-	"version": "0.0.1",
-	"description": "Allows getters/setters in roblox-ts.",
+	"version": "2.0.0",
+	"description": "Transformer that implements getters and setters by converting them into methods and method calls",
 	"main": "out/index.js",
-	"author": "wAD",
-	"license": "ISC",
+	"author": "wAD (https://github.com/wad4444)",
+	"license": "MIT",
+	"keywords": [
+	  "rbxts",
+	  "getters",
+	  "setters",
+	  "setget",
+	  "@rbxts",
+	  "transformer"
+	],
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/wAD4444/rbxts-transformer-setget"
