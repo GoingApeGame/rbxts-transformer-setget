@@ -5,10 +5,7 @@
 		"outDir": "out",
 		"rootDir": "src",
 		"strict": true,
-		"lib": [
-			"ES2015",
-			"DOM"
-		],
+		"lib": ["ES2015", "DOM"],
 		"esModuleInterop": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true

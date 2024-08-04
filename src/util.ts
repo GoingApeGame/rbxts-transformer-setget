@@ -57,9 +57,7 @@ export function writeLine(...messages: unknown[]) {
 				: `${JSON.stringify(message, undefined, "\t")}`;
 
 		const prefix = `[${chalk.gray("rbxts-transformer-setget")}]: `;
-		process.stdout.write(
-			`${prefix}${text.replace(/\n/g, `\n${prefix}`)}\n`,
-		);
+		process.stdout.write(`${prefix}${text.replace(/\n/g, `\n${prefix}`)}\n`);
 	}
 }
 
