@@ -1,38 +1,73 @@
-# rbxts-transformer-services
-This is a [demo transformer](#template) that converts @rbxts/services imports into plain GetService calls for increased legibility.
+# rbxts-transformer-setget
+
+This transformer implements Getters and Setters to roblox-ts by converting them into methods and method calls.
+
+Please note that this does not solve the problems pertaining to why Getters/Setters were removed from roblox-ts in the first place as detailed [here](https://github.com/roblox-ts/roblox-ts/issues/457) but should work fine if you avoid union types that have Getters/Setters.
+
+## Usage
+
+To use this transformer you have to add rbxts-transformer-setget to your tsconfig.json file in compilerOptions config
+
+```json
+"plugins": [
+	{
+		"transform": "rbxts-transformer-setget"
+	}
+]
+```
+
+If you use eslint you will need to add the following rule to your .eslintrc file in the rules config
+
+```json
+	"rules": {
+		"roblox-ts/no-getters-or-setters": "off"
+	}
+```
 
 ## Example
+
 ```ts
 // input.ts
-import { Players, ServerScriptService } from "@rbxts/services";
+class ExampleClass {
+  private m_Member = 1;
+  public get Member(): number {
+    return this.m_Member;
+  }
+  public set Member(str: number) {
+    this.m_Member = str;
+  }
+}
 
-print(Players.LocalPlayer);
-print(ServerScriptService.GetChildren().size());
+const example = new ExampleClass();
+example.Member = 8;
+print(example.Member);
 ```
 
 ```lua
 -- output.lua
-local Players = game:GetService("Players")
-local ServerScriptService = game:GetService("ServerScriptService")
-print(Players.LocalPlayer)
-print(#ServerScriptService:GetChildren())
+local ExampleClass
+do
+	ExampleClass = setmetatable({}, {
+		__tostring = function()
+			return "ExampleClass"
+		end,
+	})
+	ExampleClass.__index = ExampleClass
+	function ExampleClass.new(...)
+		local self = setmetatable({}, ExampleClass)
+		return self:constructor(...) or self
+	end
+	function ExampleClass:constructor()
+		self.m_Member = 1
+	end
+	function ExampleClass:_getMember()
+		return self.m_Member
+	end
+	function ExampleClass:_setMember(str)
+		self.m_Member = str
+	end
+end
+local example = ExampleClass.new()
+example:_setMember(8)
+print(example:_getMember())
 ```
-
-# Template
-This transformer is intended to be used as a template for those who are interested in creating their own transformers in roblox-ts.
-
-A necessary resource for those starting out with transformers is [ts-ast-viewer](https://ts-ast-viewer.com/). It shows you the result of AST, relevant properties, symbol information, type information and it automatically generates factory code for nodes. For example, you can see the code this transformer generates [here](https://ts-ast-viewer.com/#code/MYewdgzgLgBACgGwIYE8CmAnCMC8MDmSAtmgHQDiaUAypgG4CWwaAFAESKqYRsCUANACgYImAHUQGANYQADkma4CxMpRr0mrNhIxQZ85nwDcQA).
-
-I'd also recommend downloading the [TypeScript repo](https://github.com/microsoft/TypeScript) locally as it's extremely helpful when you're using undocumented (the majority of the compiler API), internal or uncommon APIs.
-
-Transformers mutate the TypeScript [AST](https://en.wikipedia.org/wiki/Abstract_syntax_tree) by replacing parts of the AST with new nodes. Transformers are also able to utilize symbol and type information giving you access to TypeScript's advanced control flow analysis.
-
-## Other Transformers
-
-Here's a list of transformers if you want to see how they handle working with parts of the TypeScript compiler api not shown here (e.g symbols or types).
-
-- [rbxts-transform-debug](https://github.com/roblox-aurora/rbxts-transform-debug) by [@roblox-aurora](https://github.com/roblox-aurora)
-- [rbxts-transform-env](https://github.com/roblox-aurora/rbxts-transform-env) by [@roblox-aurora](https://github.com/roblox-aurora)
-- [Flamework](https://github.com/rbxts-flamework/transformer) by [@rbxts-flamework](https://github.com/rbxts-flamework)
-
-One other source you may goto for learning about transformers is actually [roblox-ts](https://github.com/roblox-ts/roblox-ts/tree/master/src/TSTransformer) itself. This generates a Luau AST instead of a TS AST but it may still be a useful resource for learning about the compiler api.
