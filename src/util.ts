@@ -85,9 +85,10 @@ export function isChildOfNode(parent: ts.Node, node: ts.Node) {
 	return result;
 }
 
-export function isFromNodeModules(Node: ts.Node): boolean {
-	const SourceFile = Node.getSourceFile();
-	return SourceFile?.fileName.includes("node_modules") ?? false;
+export function isFromInterface(getter?: ts.Declaration, setter?: ts.Declaration): boolean {
+	const getterIsInterface = getter ? ts.isInterfaceDeclaration(getter.parent) : false;
+	const setterIsInterface = setter ? ts.isInterfaceDeclaration(setter.parent) : false;
+	return getterIsInterface || setterIsInterface;
 }
 
 export function getGetterSetterDeclarations(

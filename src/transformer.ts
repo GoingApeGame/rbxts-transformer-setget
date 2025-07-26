@@ -6,6 +6,7 @@ import {
 	getDescendantsOfType,
 	getGetterSetterDeclarations,
 	isChildOfNode,
+	isFromInterface,
 	writeLine,
 } from "./util";
 
@@ -42,13 +43,12 @@ function visitPropertyAccessExpression(
 	node: ts.PropertyAccessExpression,
 ) {
 	const { factory, program, config } = context;
-	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(
-		program,
-		node,
-	);
-	const isGetterOrSetter =
-		(getterDeclaration || setterDeclaration) !== undefined;
-	if (!isGetterOrSetter) return context.transform(node);
+
+	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, node);
+
+	if (isFromInterface(getterDeclaration, setterDeclaration)) {
+		return context.transform(node);
+	}
 
 	const assignmentExpression = getAncestorOfType(
 		node,
@@ -128,14 +128,19 @@ function visitBinaryExpression(
 		propertyAccessExpression,
 	);
 
+	// 🔐 Skip transformation if declared in an interface
+	if (isFromInterface(getterDeclaration, setterDeclaration)) {
+		return context.transform(node);
+	}
+
 	const isSetter = setterDeclaration !== undefined;
 	if (!isSetter) return context.transform(node);
 
 	const original = propertyAccessExpression;
-	const SETTER_IDENTIFIER = factory.createIdentifier(
+	const setterIdentifier = factory.createIdentifier(
 		`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
 	);
-	const GETTER_IDENTIFIER = factory.createIdentifier(
+	const getterIdentifier = factory.createIdentifier(
 		`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${original.name.getText()}`,
 	);
 
@@ -143,7 +148,7 @@ function visitBinaryExpression(
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
 				context.transform(original).expression,
-				SETTER_IDENTIFIER,
+				setterIdentifier,
 			),
 			undefined,
 			[context.transform(node).right],
@@ -172,7 +177,7 @@ function visitBinaryExpression(
 		return factory.createCallExpression(
 			factory.createPropertyAccessExpression(
 				context.transform(original).expression,
-				SETTER_IDENTIFIER,
+				setterIdentifier,
 			),
 			undefined,
 			[
@@ -180,7 +185,7 @@ function visitBinaryExpression(
 					factory.createCallExpression(
 						factory.createPropertyAccessExpression(
 							context.transform(original).expression,
-							GETTER_IDENTIFIER,
+							getterIdentifier,
 						),
 						undefined,
 						undefined,
@@ -194,6 +199,7 @@ function visitBinaryExpression(
 
 	return context.transform(node);
 }
+
 
 const postfixUnaryOperatorLookup: Record<
 	ts.PostfixUnaryOperator,
@@ -214,13 +220,11 @@ function visitPostfixUnaryExpression(
 	);
 	if (!propertyAccessExpression) return context.transform(node);
 
-	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(
-		program,
-		propertyAccessExpression,
-	);
+	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, propertyAccessExpression);
 
-	const isSetter = setterDeclaration !== undefined;
-	if (!isSetter) return context.transform(node);
+	if (isFromInterface(getterDeclaration, setterDeclaration)) {
+		return context.transform(node);
+	}
 
 	const original = propertyAccessExpression;
 	const SETTER_IDENTIFIER = factory.createIdentifier(
