@@ -65,7 +65,7 @@ function visitPropertyAccessExpression(
 		return context.transform(node);
 	}
 
-	if (isFromInterface(getterDeclaration, setterDeclaration)) return context.transform(node);
+	if (isFromInterface(getterDeclaration, setterDeclaration, program)) return context.transform(node);
 
 	const assignmentExpression = getAncestorOfType(node, ts.isAssignmentExpression);
 	const isSetter =
@@ -119,7 +119,7 @@ function visitBinaryExpression(context: TransformContext, node: ts.BinaryExpress
 
 	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, propertyAccess);
 	if (!setterDeclaration) return context.transform(node);
-	if (isFromInterface(getterDeclaration, setterDeclaration)) return context.transform(node);
+	if (isFromInterface(getterDeclaration, setterDeclaration, program)) return context.transform(node);
 
 	const setterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${propertyAccess.name.text}`);
 	const getterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${propertyAccess.name.text}`);
@@ -180,7 +180,7 @@ function visitPostfixUnaryExpression(context: TransformContext, node: ts.Postfix
 
 	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, propertyAccess);
 	if (!setterDeclaration) return context.transform(node);
-	if (isFromInterface(getterDeclaration, setterDeclaration)) return context.transform(node);
+	if (isFromInterface(getterDeclaration, setterDeclaration, program)) return context.transform(node);
 
 	const setterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${propertyAccess.name.text}`);
 	const getterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${propertyAccess.name.text}`);

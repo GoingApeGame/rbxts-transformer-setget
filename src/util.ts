@@ -88,11 +88,35 @@ export function isChildOfNode(parent: ts.Node, node: ts.Node) {
 export function isFromInterface(
 	getter?: ts.Declaration,
 	setter?: ts.Declaration,
+	program?: ts.Program,
 ): boolean {
-	return (
-		(!!getter && ts.isInterfaceDeclaration(getter.parent)) ||
-		(!!setter && ts.isInterfaceDeclaration(setter.parent))
-	);
+	if (!program) return false;
+	const typeChecker = program.getTypeChecker();
+
+	const check = (decl?: ts.Declaration) => {
+		if (!decl || !ts.isInterfaceDeclaration(decl.parent)) return false;
+
+		const type = typeChecker.getTypeAtLocation(decl.parent);
+		return doesTypeExtendInstance(typeChecker, type);
+	};
+
+	return check(getter) || check(setter);
+}
+
+function doesTypeExtendInstance(typeChecker: ts.TypeChecker, type: ts.Type): boolean {
+	const symbol = type.getSymbol();
+	if (!symbol) return false;
+
+	const name = symbol.getName();
+	if (name === "Instance") return true;
+
+	for (const base of type.getBaseTypes() ?? []) {
+		if (doesTypeExtendInstance(typeChecker, base)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 
