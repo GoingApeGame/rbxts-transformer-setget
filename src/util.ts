@@ -109,16 +109,14 @@ export function getGetterSetterDeclarations(
 	if (!nodeSymbol.declarations) return [undefined, undefined];
 
 	for (const declaration of nodeSymbol.declarations) {
-		if (ts.isGetAccessorDeclaration(declaration)) {
+		if (ts.isGetAccessorDeclaration(declaration) && ts.isClassLike(declaration.parent)) {
 			getterDeclaration = declaration;
 		}
-
-		if (ts.isSetAccessorDeclaration(declaration)) {
+		if (ts.isSetAccessorDeclaration(declaration) && ts.isClassLike(declaration.parent)) {
 			setterDeclaration = declaration;
 		}
-
-		if (getterDeclaration && setterDeclaration) break;
 	}
+
 
 	return [getterDeclaration, setterDeclaration];
 }

@@ -58,7 +58,13 @@ function visitPropertyAccessExpression(
 
 	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, node);
 
-	if (!getterDeclaration && !setterDeclaration) return context.transform(node);
+	if (
+		(!getterDeclaration || ts.isInterfaceDeclaration(getterDeclaration.parent)) &&
+		(!setterDeclaration || ts.isInterfaceDeclaration(setterDeclaration.parent))
+	) {
+		return context.transform(node);
+	}
+
 	if (isFromInterface(getterDeclaration, setterDeclaration)) return context.transform(node);
 
 	const assignmentExpression = getAncestorOfType(node, ts.isAssignmentExpression);
