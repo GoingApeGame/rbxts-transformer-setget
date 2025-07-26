@@ -91,16 +91,25 @@ export function isFromInterface(
 	program?: ts.Program,
 ): boolean {
 	if (!program) return false;
-	const typeChecker = program.getTypeChecker();
 
-	const check = (decl?: ts.Declaration) => {
+	const checker = program.getTypeChecker();
+
+	function isInterfaceExtendingInstance(decl: ts.Declaration | undefined): boolean {
 		if (!decl || !ts.isInterfaceDeclaration(decl.parent)) return false;
 
-		const type = typeChecker.getTypeAtLocation(decl.parent);
-		return doesTypeExtendInstance(typeChecker, type);
-	};
+		const type = checker.getTypeAtLocation(decl.parent);
+		const instanceSymbol = checker.resolveName("Instance", decl.getSourceFile(), ts.SymbolFlags.Interface, false);
+		if (!instanceSymbol) return false;
 
-	return check(getter) || check(setter);
+		// Walk base types
+		const extendsInstance = checker.getBaseTypes(type as ts.InterfaceType).some((base) => {
+			return checker.getFullyQualifiedName(base.symbol) === checker.getFullyQualifiedName(instanceSymbol);
+		});
+
+		return extendsInstance;
+	}
+
+	return isInterfaceExtendingInstance(getter) || isInterfaceExtendingInstance(setter);
 }
 
 function doesTypeExtendInstance(typeChecker: ts.TypeChecker, type: ts.Type): boolean {
