@@ -6,7 +6,6 @@ import {
 	getDescendantsOfType,
 	getGetterSetterDeclarations,
 	isChildOfNode,
-	isFromNodeModules,
 	writeLine,
 } from "./util";
 
@@ -47,14 +46,9 @@ function visitPropertyAccessExpression(
 		program,
 		node,
 	);
-
-	if (
-		(getterDeclaration && isFromNodeModules(getterDeclaration)) ||
-		(setterDeclaration && isFromNodeModules(setterDeclaration))
-	) {
-		return context.transform(node);
-	}
-
+	const isGetterOrSetter =
+		(getterDeclaration || setterDeclaration) !== undefined;
+	if (!isGetterOrSetter) return context.transform(node);
 
 	const assignmentExpression = getAncestorOfType(
 		node,
@@ -134,20 +128,10 @@ function visitBinaryExpression(
 		propertyAccessExpression,
 	);
 
-	if ((setterDeclaration && isFromNodeModules(setterDeclaration))) {
-		return context.transform(node);
-	}
+	const isSetter = setterDeclaration !== undefined;
+	if (!isSetter) return context.transform(node);
 
 	const original = propertyAccessExpression;
-
-	if (!ts.isIdentifier(original.name)) {
-		writeLine(
-			`Unexpected property name kind: ${chalk.yellow(ts.SyntaxKind[original.name.kind])} in ${chalk.yellow(original.getText())}`,
-		);
-		return context.transform(node); // Skip transforming if we can't safely access the name
-	}
-
-	
 	const SETTER_IDENTIFIER = factory.createIdentifier(
 		`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
 	);
@@ -235,9 +219,8 @@ function visitPostfixUnaryExpression(
 		propertyAccessExpression,
 	);
 
-	if ((setterDeclaration && isFromNodeModules(setterDeclaration))) {
-		return context.transform(node);
-	}
+	const isSetter = setterDeclaration !== undefined;
+	if (!isSetter) return context.transform(node);
 
 	const original = propertyAccessExpression;
 	const SETTER_IDENTIFIER = factory.createIdentifier(
