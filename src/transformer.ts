@@ -139,6 +139,15 @@ function visitBinaryExpression(
 	}
 
 	const original = propertyAccessExpression;
+
+	if (!ts.isIdentifier(original.name)) {
+		writeLine(
+			`Unexpected property name kind: ${chalk.yellow(ts.SyntaxKind[original.name.kind])} in ${chalk.yellow(original.getText())}`,
+		);
+		return context.transform(node); // Skip transforming if we can't safely access the name
+	}
+
+	
 	const SETTER_IDENTIFIER = factory.createIdentifier(
 		`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${original.name.getText()}`,
 	);
