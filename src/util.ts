@@ -101,22 +101,40 @@ export function getGetterSetterDeclarations(
 	node: ts.PropertyAccessExpression,
 ) {
 	const typeChecker = program.getTypeChecker();
-	const nodeSymbol = typeChecker.getSymbolAtLocation(node);
+	const nodeSymbol = typeChecker.getSymbolAtLocation(node.name);
 	if (!nodeSymbol) return [undefined, undefined];
 
-	let getterDeclaration: ts.GetAccessorDeclaration | undefined;
-	let setterDeclaration: ts.SetAccessorDeclaration | undefined;
-	if (!nodeSymbol.declarations) return [undefined, undefined];
+	let getterDeclaration: ts.Declaration | undefined;
+	let setterDeclaration: ts.Declaration | undefined;
 
-	for (const declaration of nodeSymbol.declarations) {
-		if (ts.isGetAccessorDeclaration(declaration) && ts.isClassLike(declaration.parent)) {
-			getterDeclaration = declaration;
-		}
-		if (ts.isSetAccessorDeclaration(declaration) && ts.isClassLike(declaration.parent)) {
-			setterDeclaration = declaration;
+	if (nodeSymbol.declarations) {
+		for (const declaration of nodeSymbol.declarations) {
+			// Use parent check to avoid interface members
+			if (
+				ts.isGetAccessorDeclaration(declaration) &&
+				ts.isClassLike(declaration.parent)
+			) {
+				getterDeclaration = declaration;
+			}
+			if (
+				ts.isSetAccessorDeclaration(declaration) &&
+				ts.isClassLike(declaration.parent)
+			) {
+				setterDeclaration = declaration;
+			}
 		}
 	}
 
+	// 🧠 Fallback: Use type to infer if it's a getter/setter even if not declared directly
+	const parentType = typeChecker.getTypeAtLocation(node.expression);
+	const property = parentType.getProperty(node.name.text);
+	if (property) {
+		const getter = property.getDeclarations()?.find((decl) => ts.isGetAccessorDeclaration(decl));
+		const setter = property.getDeclarations()?.find((decl) => ts.isSetAccessorDeclaration(decl));
+		getterDeclaration ??= getter;
+		setterDeclaration ??= setter;
+	}
 
 	return [getterDeclaration, setterDeclaration];
 }
+
