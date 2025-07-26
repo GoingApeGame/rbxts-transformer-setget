@@ -118,8 +118,18 @@ function visitBinaryExpression(context: TransformContext, node: ts.BinaryExpress
 	if (!propertyAccess || !ts.isIdentifier(propertyAccess.name)) return context.transform(node);
 
 	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, propertyAccess);
-	if (!setterDeclaration) return context.transform(node);
+
+	if (!getterDeclaration && !setterDeclaration) return context.transform(node);
 	if (isFromInterface(getterDeclaration, setterDeclaration, program)) return context.transform(node);
+
+	// If this assignment needs to write but we have no setter, bail
+	if (
+		(node.operatorToken.kind === ts.SyntaxKind.EqualsToken ||
+		ts.isAssignmentExpression(node, false)) &&
+		!setterDeclaration
+	) {
+		return context.transform(node);
+	}
 
 	const setterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${propertyAccess.name.text}`);
 	const getterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${GETTER_PREFIX}${propertyAccess.name.text}`);
@@ -179,7 +189,7 @@ function visitPostfixUnaryExpression(context: TransformContext, node: ts.Postfix
 	if (!propertyAccess || !ts.isIdentifier(propertyAccess.name)) return context.transform(node);
 
 	const [getterDeclaration, setterDeclaration] = getGetterSetterDeclarations(program, propertyAccess);
-	if (!setterDeclaration) return context.transform(node);
+	if (!getterDeclaration && !setterDeclaration) return context.transform(node);
 	if (isFromInterface(getterDeclaration, setterDeclaration, program)) return context.transform(node);
 
 	const setterIdentifier = factory.createIdentifier(`${config.customPrefix ?? DEFAULT_PREFIX}${SETTER_PREFIX}${propertyAccess.name.text}`);
