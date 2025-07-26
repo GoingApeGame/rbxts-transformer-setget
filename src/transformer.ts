@@ -6,6 +6,7 @@ import {
 	getDescendantsOfType,
 	getGetterSetterDeclarations,
 	isChildOfNode,
+	isFromNodeModules,
 	writeLine,
 } from "./util";
 
@@ -46,9 +47,14 @@ function visitPropertyAccessExpression(
 		program,
 		node,
 	);
-	const isGetterOrSetter =
-		(getterDeclaration || setterDeclaration) !== undefined;
-	if (!isGetterOrSetter) return context.transform(node);
+
+	if (
+		(getterDeclaration && isFromNodeModules(getterDeclaration)) ||
+		(setterDeclaration && isFromNodeModules(setterDeclaration))
+	) {
+		return context.transform(node);
+	}
+
 
 	const assignmentExpression = getAncestorOfType(
 		node,
@@ -128,8 +134,9 @@ function visitBinaryExpression(
 		propertyAccessExpression,
 	);
 
-	const isSetter = setterDeclaration !== undefined;
-	if (!isSetter) return context.transform(node);
+	if ((setterDeclaration && isFromNodeModules(setterDeclaration))) {
+		return context.transform(node);
+	}
 
 	const original = propertyAccessExpression;
 	const SETTER_IDENTIFIER = factory.createIdentifier(
@@ -219,8 +226,9 @@ function visitPostfixUnaryExpression(
 		propertyAccessExpression,
 	);
 
-	const isSetter = setterDeclaration !== undefined;
-	if (!isSetter) return context.transform(node);
+	if ((setterDeclaration && isFromNodeModules(setterDeclaration))) {
+		return context.transform(node);
+	}
 
 	const original = propertyAccessExpression;
 	const SETTER_IDENTIFIER = factory.createIdentifier(
